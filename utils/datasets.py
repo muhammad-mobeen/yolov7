@@ -305,7 +305,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
 
-    def failure_revival(self, i, cap):
+    def failure_revival(self, i):
         n = len(self.failure_sources)
         # Start the thread to read frames from the video stream
         print(f'{i + 1}/{n}: {self.failure_sources[i]}... ', end='')
@@ -342,7 +342,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
                 n = 0
             time.sleep(1 / self.fps)  # wait time
         if failure:
-            self.failure_revival(index, cap)
+            self.failure_revival(index)
 
     def __iter__(self):
         self.count = -1
