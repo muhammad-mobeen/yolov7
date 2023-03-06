@@ -277,6 +277,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
         n = len(sources)
         self.imgs = [None] * n
+        self.failure_sources = sources   # Custom by mobeen
         self.sources = [clean_str(x) for x in sources]  # clean source names for later
         for i, s in enumerate(sources):
             # Start the thread to read frames from the video stream
@@ -304,9 +305,30 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
 
+    def failure_revival(self, i, cap):
+        n = len(self.failure_sources)
+        # Start the thread to read frames from the video stream
+        print(f'{i + 1}/{n}: {self.failure_sources[i]}... ', end='')
+        url = eval(self.failure_sources[i]) if self.failure_sources[i].isnumeric() else self.failure_sources[i]
+        if 'youtube.com/' in str(url) or 'youtu.be/' in str(url):  # if source is YouTube video
+            check_requirements(('pafy', 'youtube_dl'))
+            import pafy
+            url = pafy.new(url).getbest(preftype="mp4").url
+        cap = cv2.VideoCapture(url)
+        assert cap.isOpened(), f'Failed to open {self.failure_sources[i]}'
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = cap.get(cv2.CAP_PROP_FPS) % 100
+
+        _, self.imgs[i] = cap.read()  # guarantee first frame
+        thread = Thread(target=self.update, args=([i, cap]), daemon=True)
+        print(f' success ({w}x{h} at {self.fps:.2f} FPS).')
+        thread.start()
+
     def update(self, index, cap):
         # Read next stream frame in a daemon thread
         n = 0
+        failure = False
         while cap.isOpened():
             n += 1
             # _, self.imgs[index] = cap.read()
@@ -314,8 +336,13 @@ class LoadStreams:  # multiple IP or RTSP cameras
             if n == 4:  # read every 4th frame
                 success, im = cap.retrieve()
                 self.imgs[index] = im if success else self.imgs[index] * 0
+                if not success:
+                    failure = True
+                    break
                 n = 0
             time.sleep(1 / self.fps)  # wait time
+        if failure:
+            self.failure_revival(index, cap)
 
     def __iter__(self):
         self.count = -1
